@@ -49,10 +49,8 @@ deploy:
   script:
     - pnpm install --frozen-lockfile
     - pnpm build
-    - pnpm doc
-    - pnpm pre-serve
     - mkdir -p public
-    - cp -r ./packages/examples/public/* public/
+    - cp -r ./packages/cad-simple-viewer-example/dist/* public/
   artifacts:
     paths:
       - public

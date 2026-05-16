@@ -1,10 +1,13 @@
-import { AcGiSubEntityTraits } from '@mlightcad/data-model'
+import { AcGiSubEntityTraits, log } from '@mlightcad/data-model'
 import * as THREE from 'three'
 
 import { AcTrFillMaterialManager } from './AcTrFillMaterialManager'
 import { AcTrLineMaterialManager } from './AcTrLineMaterialManager'
 import { AcTrPointMaterialManager } from './AcTrPointMaterialManager'
-import { AcTrStyleManagerOptions } from './AcTrStyleManagerOptions'
+import {
+  type AcTrHatchRenderingWarning,
+  AcTrStyleManagerOptions
+} from './AcTrStyleManagerOptions'
 
 /**
  * Central style/material access point for the CAD viewer.
@@ -36,6 +39,7 @@ export class AcTrStyleManager {
   private pointMgr: AcTrPointMaterialManager
   private lineMgr: AcTrLineMaterialManager
   private fillMgr: AcTrFillMaterialManager
+  private reportedHatchWarningLogKeys = new Set<string>()
 
   constructor() {
     this.pointMgr = new AcTrPointMaterialManager(this.options)
@@ -131,6 +135,33 @@ export class AcTrStyleManager {
       rebaseOffset,
       gradientBounds
     })
+  }
+
+  /**
+   * Reports a recoverable hatch rendering issue to the host application.
+   *
+   * The callback fires for every occurrence so the active document can surface
+   * a warning, while development logging is de-duplicated by warning kind to
+   * keep malformed hatch-heavy drawings from flooding the console.
+   */
+  reportHatchRenderingWarning(warning: AcTrHatchRenderingWarning) {
+    this.options.onHatchRenderingWarning?.(warning)
+
+    const logKey = warning.kind
+    if (this.reportedHatchWarningLogKeys.has(logKey)) {
+      return
+    }
+
+    this.reportedHatchWarningLogKeys.add(logKey)
+    log.debug(`[AcTrHatch] ${warning.message}`, warning.details ?? {})
+  }
+
+  /**
+   * Clears per-document hatch warning log de-duplication.
+   */
+  resetHatchRenderingWarnings() {
+    this.reportedHatchWarningLogKeys.clear()
+    this.fillMgr.resetHatchRenderingWarnings()
   }
 
   /**

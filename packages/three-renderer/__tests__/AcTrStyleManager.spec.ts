@@ -1,6 +1,7 @@
 import { AcCmColor } from '@mlightcad/data-model'
 import * as THREE from 'three'
 
+import type { AcTrHatchRenderingWarning } from '../src/style/AcTrStyleManagerOptions'
 import { getMaterialMetadata } from '../src/style/AcTrMaterialMetadata'
 import { AcTrStyleManager } from '../src/style/AcTrStyleManager'
 import { AcTrSubEntityTraitsUtil } from '../src/util/AcTrEntityTraitsUtil'
@@ -307,5 +308,70 @@ describe('AcTrStyleManager', () => {
     const metadata = getMaterialMetadata(material)
     expect(metadata.drawOrder).toBe(-1)
     expect(metadata.isBackgroundFill).toBe(false)
+  })
+
+  it('downgrades hatch patterns that exceed the fragment uniform budget', () => {
+    const warnings: AcTrHatchRenderingWarning[] = []
+    const styleManager = new AcTrStyleManager()
+    styleManager.options.maxFragmentUniforms = 8
+    styleManager.options.onHatchRenderingWarning = warning => {
+      warnings.push(warning)
+    }
+
+    const traits = AcTrSubEntityTraitsUtil.createDefaultTraits()
+    traits.layer = 'A-HATCH'
+    traits.rgbColor = 0x00ff00
+    traits.drawOrder = -1
+    traits.fillType = {
+      solidFill: false,
+      patternAngle: 0,
+      definitionLines: [
+        {
+          angle: 0,
+          base: { x: 0, y: 0 },
+          offset: { x: 0, y: 1 },
+          dashLengths: [1, -1]
+        }
+      ]
+    }
+
+    const material = styleManager.getFillMaterial(traits)
+
+    expect(material).toBeInstanceOf(THREE.MeshBasicMaterial)
+    expect(warnings.map(warning => warning.kind)).toEqual([
+      'pattern-truncated',
+      'pattern-empty'
+    ])
+  })
+
+  it('downgrades malformed hatch pattern lines without throwing', () => {
+    const warnings: AcTrHatchRenderingWarning[] = []
+    const styleManager = new AcTrStyleManager()
+    styleManager.options.onHatchRenderingWarning = warning => {
+      warnings.push(warning)
+    }
+
+    const traits = AcTrSubEntityTraitsUtil.createDefaultTraits()
+    traits.layer = 'A-HATCH'
+    traits.rgbColor = 0x00ff00
+    traits.drawOrder = -1
+    traits.fillType = {
+      solidFill: false,
+      patternAngle: 0,
+      definitionLines: [
+        {
+          angle: 0,
+          base: { x: 0, y: 0 },
+          offset: { x: 0, y: 1 }
+        } as never
+      ]
+    }
+
+    const material = styleManager.getFillMaterial(traits)
+
+    expect(material).toBeInstanceOf(THREE.MeshBasicMaterial)
+    expect(warnings.map(warning => warning.kind)).toEqual([
+      'pattern-line-invalid'
+    ])
   })
 })

@@ -169,6 +169,9 @@ export class AcTrView2d extends AcEdBaseView {
         count: args.count ?? 0
       })
     })
+    this._renderer.events.hatchRenderWarning.addEventListener(args => {
+      eventBus.emit('hatch-render-warning', args)
+    })
 
     this._scene = this.createScene()
     // Initialize background color through setter to keep renderer/cursor/foreground in sync.
@@ -938,6 +941,7 @@ export class AcTrView2d extends AcEdBaseView {
     this._scene.clear()
     this._isDirty = true
     this._missedImages.clear()
+    this._renderer.resetHatchRenderingWarnings()
     this._renderer.dispose()
   }
 

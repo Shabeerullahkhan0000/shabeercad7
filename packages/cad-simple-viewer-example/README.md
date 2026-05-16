@@ -119,7 +119,6 @@ pnpm lint:fix
 ## Notes
 
 - This is a minimal example focusing on the core functionality
-- For more advanced features, consider using the full `@mlightcad/cad-viewer` package
 - DWG file support requires WebAssembly support in the browser
 - The viewer uses WebGL for hardware-accelerated rendering
 - Production builds include optimized code splitting for better performance

@@ -1,14 +1,12 @@
 {
-    "entryPoints": ["packages/cad-viewer", "packages/cad-simple-viewer"],
+    "entryPoints": ["packages/cad-simple-viewer"],
     "name": "MLightCAD",
     "out": "docs",
     "entryPointStrategy": "packages",
     "includeVersion": false,
     "exclude": [
         "**/__tests__/**",
-        "**/*.test.ts",
-        "**/*.vue",
-        "**/*.vue.ts"
+        "**/*.test.ts"
     ],
     "excludeExternals": true,
     "excludePrivate": true,

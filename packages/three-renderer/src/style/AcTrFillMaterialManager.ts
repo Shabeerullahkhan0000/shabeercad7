@@ -19,6 +19,7 @@ import {
   getMaterialMetadata,
   setMaterialMetadata
 } from './AcTrMaterialMetadata'
+import type { AcTrHatchRenderingWarningKind } from './AcTrStyleManagerOptions'
 
 export interface AcTrFillMaterialOptions {
   rebaseOffset: THREE.Vector2
@@ -34,6 +35,8 @@ export interface AcTrFillMaterialOptions {
   side?: AcTrMaterialSide
 }
 
+const MAX_HATCH_DASH_SEGMENTS_PER_LINE = 64
+
 /**
  * Material manager for hatch and solid fill entities.
  *
@@ -44,6 +47,12 @@ export interface AcTrFillMaterialOptions {
  * - Provides `clear()` method to dispose of all cached materials.
  */
 export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMaterialOptions> {
+  private reportedHatchWarningLogKeys = new Set<AcTrHatchRenderingWarningKind>()
+
+  resetHatchRenderingWarnings() {
+    this.reportedHatchWarningLogKeys.clear()
+  }
+
   /**
    * Returns a `BackSide` variant of the given fill material.
    *
@@ -159,9 +168,10 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
     } else if (
       style.definitionLines.some(line => !this.isValidDefinitionLine(line))
     ) {
-      log.warn(
-        'Invalid hatch pattern definition line, fallback to solid fill',
-        style
+      this.reportHatchWarning(
+        'pattern-line-invalid',
+        'Invalid hatch pattern definition line; rendering this hatch as a solid fill.',
+        { definitionLineCount: style.definitionLines.length }
       )
       material = this.createMeshBasicMaterial(effectiveTraits, threeSide)
     } else {
@@ -209,9 +219,18 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
     // Get a max size to be used for all patternLines, this value will be used during
     // glsl compile time, and it cannot be 0 (compile error) and cannot be 1 (run time warning).
     let maxPatternSegmentCount = 2
+    let hasTruncatedSegments = false
     style.definitionLines.forEach(definitionLine => {
+      if (
+        definitionLine.dashLengths.length > MAX_HATCH_DASH_SEGMENTS_PER_LINE
+      ) {
+        hasTruncatedSegments = true
+      }
       maxPatternSegmentCount = Math.max(
-        definitionLine.dashLengths.length,
+        Math.min(
+          definitionLine.dashLengths.length,
+          MAX_HATCH_DASH_SEGMENTS_PER_LINE
+        ),
         maxPatternSegmentCount
       )
     })
@@ -220,6 +239,7 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
 
     const patternLines: AcTrPatternLine[] = []
     const tempCenter = new THREE.Vector2()
+    let hasTruncated = false
     for (const hatchPatternLine of style.definitionLines) {
       const base = new THREE.Vector2(
         hatchPatternLine.base.x,
@@ -231,12 +251,19 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
         hatchPatternLine.offset.y
       ).rotateAround(tempCenter, -hatchPatternLine.angle)
 
-      if (offset.y === 0) {
-        log.warn('offset.y is zero, skipping pattern line')
+      if (!Number.isFinite(offset.y) || offset.y === 0) {
+        this.reportHatchWarning(
+          'pattern-line-skipped',
+          'Skipped a hatch pattern line with an invalid offset.',
+          { offsetY: offset.y }
+        )
         continue
       }
 
-      const numberOfDashes = hatchPatternLine.dashLengths.length
+      const numberOfDashes = Math.min(
+        hatchPatternLine.dashLengths.length,
+        maxPatternSegmentCount
+      )
       // Indicates the dot pattern when the dashPatterns contain only 0 and negative numbers
       let bDotPattern = true
       // calculates the total length of the pattern
@@ -278,16 +305,41 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
         patternLength
       }
 
-      currentUniformCount += 4 // angle, base, offset, patternLength
-      currentUniformCount += maxPatternSegmentCount // dashLengths, consistent with HatchPatternShader
-      currentUniformCount += 4 // patternLength
-      if (currentUniformCount > this.options.maxFragmentUniforms) {
-        log.warn(
-          'There will be warning in fragment shader when number of uniforms exceeds 1024, so extra hatch line patterns are ignored here!'
-        )
+      const nextUniformCount =
+        currentUniformCount +
+        4 + // angle, base, offset, patternLength
+        maxPatternSegmentCount + // dashLengths, consistent with HatchPatternShader
+        4 // shader/material headroom for this pattern line
+      if (nextUniformCount > this.options.maxFragmentUniforms) {
+        hasTruncated = true
         break
       }
+      currentUniformCount = nextUniformCount
       patternLines.push(patternLine)
+    }
+
+    if (hasTruncatedSegments) {
+      this.reportHatchWarning(
+        'pattern-segments-truncated',
+        'Hatch dash segments were truncated to keep the shader within WebGL limits.',
+        { maxDashSegmentsPerLine: MAX_HATCH_DASH_SEGMENTS_PER_LINE }
+      )
+    }
+
+    if (hasTruncated) {
+      this.reportHatchWarning(
+        'pattern-truncated',
+        'Hatch pattern truncated: uniform count exceeds the shader budget. Some pattern lines are ignored.',
+        { maxFragmentUniforms: this.options.maxFragmentUniforms }
+      )
+    }
+
+    if (patternLines.length === 0) {
+      this.reportHatchWarning(
+        'pattern-empty',
+        'Hatch pattern could not be represented within WebGL limits; rendering it as a solid fill.'
+      )
+      return this.createMeshBasicMaterial(traits, threeSide)
     }
 
     const material = createHatchPatternShaderMaterial(
@@ -309,6 +361,21 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
     side: THREE.Side
   ): THREE.Material {
     return new THREE.MeshBasicMaterial({ color: traits.rgbColor, side })
+  }
+
+  private reportHatchWarning(
+    kind: AcTrHatchRenderingWarningKind,
+    message: string,
+    details?: Record<string, unknown>
+  ) {
+    this.options.onHatchRenderingWarning?.({ kind, message, details })
+
+    if (this.reportedHatchWarningLogKeys.has(kind)) {
+      return
+    }
+
+    this.reportedHatchWarningLogKeys.add(kind)
+    log.debug(`[AcTrHatch] ${message}`, details ?? {})
   }
 
   /**

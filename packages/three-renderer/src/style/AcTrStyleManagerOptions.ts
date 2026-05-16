@@ -1,5 +1,22 @@
 import * as THREE from 'three'
 
+export type AcTrHatchRenderingWarningKind =
+  | 'invalid-boundary'
+  | 'triangulation-failed'
+  | 'hole-merge-empty'
+  | 'hole-merge-failed'
+  | 'pattern-line-invalid'
+  | 'pattern-line-skipped'
+  | 'pattern-truncated'
+  | 'pattern-segments-truncated'
+  | 'pattern-empty'
+
+export interface AcTrHatchRenderingWarning {
+  kind: AcTrHatchRenderingWarningKind
+  message: string
+  details?: Record<string, unknown>
+}
+
 export interface AcTrStyleManagerOptions {
   // /** Uniform used by line and hatch shaders to support zoom-dependent effects. */
   // cameraZoomUniform: number
@@ -21,6 +38,12 @@ export interface AcTrStyleManagerOptions {
    * clippingPlanes as expected.
    */
   maxFragmentUniforms: number
+
+  /**
+   * Receives recoverable hatch rendering warnings. Callers can surface a user-facing
+   * notice while the renderer silently simplifies or skips the problematic hatch.
+   */
+  onHatchRenderingWarning?: (warning: AcTrHatchRenderingWarning) => void
 
   /**
    * Viewport size used by fat-line materials.

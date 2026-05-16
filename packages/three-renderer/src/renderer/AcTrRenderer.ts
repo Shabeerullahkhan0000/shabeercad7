@@ -29,6 +29,7 @@ import {
 } from '../object'
 import { AcTrMaterialManager } from '../style/AcTrMaterialManager'
 import { AcTrStyleManager } from '../style/AcTrStyleManager'
+import type { AcTrHatchRenderingWarning } from '../style/AcTrStyleManagerOptions'
 import { AcTrSubEntityTraitsUtil } from '../util'
 import { AcTrCamera } from '../viewport'
 import { AcTrMTextRenderer } from './AcTrMTextRenderer'
@@ -39,12 +40,18 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
   private _subEntityTraits: AcGiSubEntityTraits
 
   public readonly events = {
-    fontNotFound: new AcCmEventManager<FontManagerEventArgs>()
+    fontNotFound: new AcCmEventManager<FontManagerEventArgs>(),
+    hatchRenderWarning: new AcCmEventManager<AcTrHatchRenderingWarning>()
   }
 
   constructor(renderer: THREE.WebGLRenderer) {
     this._renderer = renderer
     this._styleManager = new AcTrStyleManager()
+    this._styleManager.options.maxFragmentUniforms =
+      this.resolveFragmentUniformBudget(renderer)
+    this._styleManager.options.onHatchRenderingWarning = warning => {
+      this.events.hatchRenderWarning.dispatch(warning)
+    }
     const size = renderer.getSize(new THREE.Vector2())
     this._styleManager.updateLineResolution(size.x, size.y)
     AcTrMTextRenderer.getInstance().overrideStyleManager(this._styleManager)
@@ -344,7 +351,15 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    */
   dispose() {
     this._styleManager.dispose()
+    this._styleManager.resetHatchRenderingWarnings()
     FontManager.instance.missedFonts = {}
+  }
+
+  /**
+   * Clears per-document hatch warning log de-duplication.
+   */
+  resetHatchRenderingWarnings() {
+    this._styleManager.resetHatchRenderingWarnings()
   }
 
   private linePoints(points: AcGePoint3dLike[]) {
@@ -357,5 +372,20 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
   private updateCameraZoomUniform(zoom: number) {
     // DxfLoader.CameraZoomUniform.value = (zoom * this.container.height) / 50;
     AcTrMaterialManager.CameraZoomUniform.value = zoom
+  }
+
+  private resolveFragmentUniformBudget(renderer: THREE.WebGLRenderer) {
+    const gl = renderer.getContext()
+    const rawLimit = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)
+    const vectorLimit =
+      typeof rawLimit === 'number' ? rawLimit : Number(rawLimit)
+
+    if (!Number.isFinite(vectorLimit) || vectorLimit <= 0) {
+      return this._styleManager.options.maxFragmentUniforms
+    }
+
+    // Leave headroom for Three.js built-ins, clipping uniforms, and browser
+    // driver variance. Hatch patterns that exceed this are simplified.
+    return Math.max(8, Math.floor(vectorLimit * 0.9))
   }
 }

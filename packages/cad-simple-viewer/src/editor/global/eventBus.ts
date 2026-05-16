@@ -1,4 +1,5 @@
 import { AcDbProgressdEventArgs } from '@mlightcad/data-model'
+import type { AcTrHatchRenderingWarning } from '@mlightcad/three-renderer'
 import mitt, { type Emitter } from 'mitt'
 
 import { AcEdMessageType } from '../input/ui/AcEdMessageType'
@@ -54,6 +55,8 @@ export type AcEdEvents = {
     /** Name/path of the file that failed to open */
     fileName: string
   }
+  /** Emitted when hatch rendering is simplified or skipped defensively */
+  'hatch-render-warning': AcTrHatchRenderingWarning
   /** Emitted when a required font is not found */
   'font-not-found': {
     /** Name of the missing font */

@@ -7,4 +7,8 @@ export * from './object/AcTrTransientManager'
 export * from './renderer'
 export * from './viewport'
 export * from './style/AcTrMaterialMetadata'
+export type {
+  AcTrHatchRenderingWarning,
+  AcTrHatchRenderingWarningKind
+} from './style/AcTrStyleManagerOptions'
 export * from './util/AcTrMTextColorUtil'
