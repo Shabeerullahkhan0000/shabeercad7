@@ -36,9 +36,12 @@ import { AcTrCamera } from '../viewport'
 import { AcTrMTextRenderer } from './AcTrMTextRenderer'
 
 export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
+  private static readonly DISPLAY_ORDER_Z_STEP = 1e-5
+
   private _styleManager: AcTrStyleManager
   private _renderer: THREE.WebGLRenderer
   private _subEntityTraits: AcGiSubEntityTraits
+  private _displayOrderIndex = 0
 
   public readonly events = {
     fontNotFound: new AcCmEventManager<FontManagerEventArgs>(),
@@ -268,7 +271,7 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    * @inheritdoc
    */
   group(entities: AcTrEntity[]) {
-    return new AcTrGroup(entities, this._styleManager)
+    return this.stampDisplayOrder(new AcTrGroup(entities, this._styleManager))
   }
 
   /**
@@ -281,7 +284,7 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
       style,
       this._styleManager
     )
-    return geometry
+    return this.stampDisplayOrder(geometry)
   }
 
   /**
@@ -311,12 +314,14 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    * @inheritdoc
    */
   lineSegments(array: Float32Array, itemSize: number, indices: Uint16Array) {
-    return new AcTrLineSegments(
-      array,
-      itemSize,
-      indices,
-      this._subEntityTraits,
-      this._styleManager
+    return this.stampDisplayOrder(
+      new AcTrLineSegments(
+        array,
+        itemSize,
+        indices,
+        this._subEntityTraits,
+        this._styleManager
+      )
     )
   }
 
@@ -324,7 +329,9 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    * @inheritdoc
    */
   area(area: AcGeArea2d) {
-    return new AcTrPolygon(area, this._subEntityTraits, this._styleManager)
+    return this.stampDisplayOrder(
+      new AcTrPolygon(area, this._subEntityTraits, this._styleManager)
+    )
   }
 
   /**
@@ -332,19 +339,23 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    * boundary hierarchy/boolean pipeline.
    */
   rasterMask(points: AcGePoint3dLike[]) {
-    return new AcTrRasterMask(points, this._subEntityTraits, this._styleManager)
+    return this.stampDisplayOrder(
+      new AcTrRasterMask(points, this._subEntityTraits, this._styleManager)
+    )
   }
 
   /**
    * @inheritdoc
    */
   mtext(mtext: AcGiMTextData, style: AcGiTextStyle, delay?: boolean) {
-    return new AcTrMText(
-      mtext,
-      this._subEntityTraits,
-      style,
-      this._styleManager,
-      delay
+    return this.stampDisplayOrder(
+      new AcTrMText(
+        mtext,
+        this._subEntityTraits,
+        style,
+        this._styleManager,
+        delay
+      )
     )
   }
 
@@ -352,7 +363,9 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    * @inheritdoc
    */
   image(blob: Blob, style: AcGiImageStyle) {
-    return new AcTrImage(blob, style, this._styleManager)
+    return this.stampDisplayOrder(
+      new AcTrImage(blob, style, this._styleManager)
+    )
   }
 
   /**
@@ -361,6 +374,7 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
   dispose() {
     this._styleManager.dispose()
     this._styleManager.resetHatchRenderingWarnings()
+    this.resetDisplayOrder()
     FontManager.instance.missedFonts = {}
   }
 
@@ -371,8 +385,28 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
     this._styleManager.resetHatchRenderingWarnings()
   }
 
+  /**
+   * Applies a tiny, invisible Z bias so same-plane CAD primitives retain
+   * traversal order after batching. This lets WIPEOUT masks cover earlier
+   * floor-pattern linework while later block linework can still appear on top.
+   */
+  stampDisplayOrder<T extends AcTrEntity>(entity: T) {
+    const index = this._displayOrderIndex++
+    const zOffset = index * AcTrRenderer.DISPLAY_ORDER_Z_STEP
+    entity.position.z += zOffset
+    entity.userData.displayOrderIndex = index
+    entity.updateMatrix()
+    return entity
+  }
+
+  resetDisplayOrder() {
+    this._displayOrderIndex = 0
+  }
+
   private linePoints(points: AcGePoint3dLike[]) {
-    return new AcTrLine(points, this._subEntityTraits, this._styleManager)
+    return this.stampDisplayOrder(
+      new AcTrLine(points, this._subEntityTraits, this._styleManager)
+    )
   }
 
   /**

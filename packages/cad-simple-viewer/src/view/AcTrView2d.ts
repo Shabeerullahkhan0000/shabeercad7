@@ -914,6 +914,7 @@ export class AcTrView2d extends AcEdBaseView {
         threeEntity.ownerId = entity.ownerId
         threeEntity.layerName = entity.layer
         threeEntity.visible = entity.visibility
+        this._renderer.stampDisplayOrder(threeEntity)
         this._scene.updateEntity(threeEntity)
       }
     }
@@ -1128,6 +1129,7 @@ export class AcTrView2d extends AcEdBaseView {
         threeEntity.ownerId = entity.ownerId
         threeEntity.layerName = entity.layer
         threeEntity.visible = entity.visibility
+        this._renderer.stampDisplayOrder(threeEntity)
         if (
           threeEntity instanceof AcTrGroup &&
           (threeEntity as AcTrGroup).isOnTheSameLayer
