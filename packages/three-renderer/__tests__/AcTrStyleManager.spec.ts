@@ -182,12 +182,9 @@ describe('AcTrStyleManager', () => {
     expect(metadata.isForeground).toBe(true)
   })
 
-  it('solid hatch with explicit truecolor stays at literal RGB across themes', () => {
-    // A DWG author who picked an explicit RGB via the truecolor picker
-    // (e.g. 255,255,255 from the colour palette) gets a literal hatch.
-    // `traits.color.isForeground` is only true for the ACI 7 / foreground
-    // pseudo-colour, so an explicit truecolor falls outside the bg-fuse
-    // rule even when the picked RGB happens to match the canvas paper.
+  it('solid hatch with non-white explicit truecolor stays at literal RGB across themes', () => {
+    // Non-white truecolor solid hatches are visible paint, not background
+    // masks, so they keep their authored RGB through theme changes.
     const styleManager = new AcTrStyleManager()
     styleManager.currentBackgroundColor = 0xffffff
 
@@ -210,6 +207,33 @@ describe('AcTrStyleManager', () => {
     // Theme flip must not mutate the literal truecolor.
     styleManager.currentBackgroundColor = 0x000000
     expect(material.color.getHex()).toBe(0x808080)
+  })
+
+  it('treats hatch-tier truecolor white solid fills as background masks', () => {
+    // Some construction DXF/DWG exporters encode WIPEOUT-like masking plates
+    // as literal truecolor white SOLID hatches. At the hatch tier those should
+    // fuse with the canvas background, while normal white linework remains
+    // governed by the foreground path.
+    const styleManager = new AcTrStyleManager()
+    styleManager.currentBackgroundColor = 0x000000
+
+    const traits = AcTrSubEntityTraitsUtil.createDefaultTraits()
+    traits.layer = 'A-MASK'
+    traits.color.setRGB(0xff, 0xff, 0xff)
+    traits.rgbColor = 0xffffff
+    traits.drawOrder = -1
+
+    const material = styleManager.getFillMaterial(
+      traits
+    ) as THREE.MeshBasicMaterial
+
+    const metadata = getMaterialMetadata(material)
+    expect(metadata.isBackgroundFill).toBe(true)
+    expect(metadata.isForeground).toBe(false)
+    expect(material.color.getHex()).toBe(0x000000)
+
+    styleManager.currentBackgroundColor = 0xffffff
+    expect(material.color.getHex()).toBe(0xffffff)
   })
 
   it('repaints solid foreground hatches on theme flip', () => {
