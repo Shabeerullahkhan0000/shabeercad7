@@ -105,31 +105,28 @@ export class AcTrFillMaterialManager extends AcTrMaterialManager<AcTrFillMateria
   }
 
   /**
-   * Solid hatch fills at the hatch tier (`drawOrder < 0`, no pattern,
-   * no gradient) can represent masking plates rather than visible paint.
-   * This includes ACI-7 foreground hatches and construction-file exports
-   * that encode masks as literal RGB white solid hatches instead of WIPEOUT.
-   * In both cases the fill should fuse with the active canvas background
-   * while the overlaid linework remains visible.
+   * Solid foreground hatch fills (ACI 7, `drawOrder < 0`, no pattern,
+   * no gradient) follow the canvas background colour rather than carry
+   * an absolute RGB. AutoCAD renders them as if they were painted with
+   * the paper colour, so they fuse into both light and dark canvases
+   * and only the overlaid wireframe remains visible.
    *
-   * Non-white explicit RGB hatches still render as literal colours. The
-   * white-mask rule is deliberately scoped to hatch-tier solid fills so
-   * normal white text, linework, and patterned hatch strokes stay visible.
+   * Hatches with an explicit RGB (including a literal truecolor white
+   * 0xFFFFFF) fall outside this rule: `traits.color.isForeground` is
+   * only true for the ACI 7 / foreground pseudo-colour, so a DWG
+   * author who picked `255,255,255` via the truecolor picker still
+   * gets a literal white hatch.
    */
   protected shouldTrackBackground(
     traits: AcGiSubEntityTraits,
     _options: AcTrFillMaterialOptions
   ): boolean {
+    if (!traits.color.isForeground) return false
     if ((traits.drawOrder ?? 0) >= 0) return false
     const style = traits.fillType
     if (style.gradient) return false
     const isSolid = !style.definitionLines || style.definitionLines.length === 0
-    if (!isSolid) return false
-    return traits.color.isForeground || this.isPaperWhiteFill(traits)
-  }
-
-  private isPaperWhiteFill(traits: AcGiSubEntityTraits) {
-    return traits.rgbColor === 0xffffff
+    return isSolid
   }
 
   /**

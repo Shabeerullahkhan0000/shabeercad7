@@ -1,4 +1,6 @@
 import {
+  AcCmColor,
+  AcCmTransparency,
   AcGePoint2dLike,
   AcGePoint3dLike,
   AcGiSubEntityTraits
@@ -10,6 +12,7 @@ import { AcTrEntity } from './AcTrEntity'
 
 type NumericPoint = [number, number]
 type RasterMaskPoint = AcGePoint2dLike | AcGePoint3dLike | readonly number[]
+const RASTER_MASK_DRAW_ORDER = -0.5
 
 /**
  * Direct render path for WIPEOUT/raster mask polygons.
@@ -70,12 +73,28 @@ export class AcTrRasterMask extends AcTrEntity {
       maxX: this.box.max.x,
       maxY: this.box.max.y
     }
+    const maskTraits = this.createMaskTraits(traits)
     const material = this.styleManager.getFillMaterial(
-      traits,
+      maskTraits,
       undefined,
       gradientBounds
     )
     this.add(new THREE.Mesh(geometry, material))
+  }
+
+  private createMaskTraits(traits: AcGiSubEntityTraits): AcGiSubEntityTraits {
+    return {
+      ...traits,
+      color: new AcCmColor().setForeground(),
+      rgbColor: 0xffffff,
+      fillType: {
+        solidFill: true,
+        patternAngle: 0,
+        definitionLines: []
+      },
+      transparency: new AcCmTransparency(),
+      drawOrder: RASTER_MASK_DRAW_ORDER
+    }
   }
 
   private createNumericRegion(points: readonly RasterMaskPoint[]) {
