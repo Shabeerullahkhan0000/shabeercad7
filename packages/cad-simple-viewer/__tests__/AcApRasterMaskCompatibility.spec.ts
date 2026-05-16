@@ -1,7 +1,13 @@
 import {
+  AcCmColor,
+  AcCmTransparency,
   AcDbWipeout,
   AcGePoint2d,
-  AcGePoint3d
+  AcGePoint3d,
+  AcGiEntity,
+  AcGiLineWeight,
+  AcGiRenderer,
+  AcGiSubEntityTraits
 } from '@mlightcad/data-model'
 
 import { installRasterMaskCompatibilityPatch } from '../src/app/AcApRasterMaskCompatibility'
@@ -48,6 +54,26 @@ describe('AcApRasterMaskCompatibility', () => {
     expect(points[3].x).toBeCloseTo(-15)
     expect(points[3].y).toBeCloseTo(-30)
   })
+
+  test('uses direct raster mask rendering when the renderer supports it', () => {
+    const wipeout = createUnitWipeout(50, 50)
+    const maskEntity = {} as AcGiEntity
+    const renderer = {
+      subEntityTraits: createTraits(),
+      rasterMask: jest.fn(() => maskEntity),
+      area: jest.fn()
+    } as unknown as AcGiRenderer & {
+      rasterMask: jest.Mock<AcGiEntity, [AcGePoint3d[]]>
+      area: jest.Mock
+    }
+
+    const result = wipeout.subWorldDraw(renderer)
+
+    expect(result).toBe(maskEntity)
+    expect(renderer.rasterMask).toHaveBeenCalledTimes(1)
+    expect(renderer.rasterMask.mock.calls[0][0]).toHaveLength(5)
+    expect(renderer.area).not.toHaveBeenCalled()
+  })
 })
 
 function createUnitWipeout(width: number, height: number) {
@@ -68,4 +94,29 @@ function createUnitWipeout(width: number, height: number) {
 
 function getBoundaryPath(wipeout: AcDbWipeout) {
   return (wipeout as WipeoutWithBoundaryPath).boundaryPath()
+}
+
+function createTraits(): AcGiSubEntityTraits {
+  return {
+    color: new AcCmColor(),
+    rgbColor: 0xffffff,
+    lineType: {
+      type: 'ByLayer',
+      name: 'Continuous',
+      standardFlag: 0,
+      description: 'Solid line',
+      totalPatternLength: 0
+    },
+    lineTypeScale: 1,
+    lineWeight: AcGiLineWeight.ByLayer,
+    fillType: {
+      solidFill: true,
+      patternAngle: 0,
+      definitionLines: []
+    },
+    transparency: new AcCmTransparency(),
+    thickness: 0,
+    layer: '0',
+    drawOrder: 0
+  }
 }

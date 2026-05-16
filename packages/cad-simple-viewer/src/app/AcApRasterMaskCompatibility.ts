@@ -25,6 +25,10 @@ type WipeoutWithSubWorldDraw = AcDbWipeout & {
   subWorldDraw(renderer: AcGiRenderer): AcGiEntity
 }
 
+type RasterMaskRenderer = AcGiRenderer & {
+  rasterMask?: (points: AcGePoint3d[]) => AcGiEntity
+}
+
 type RasterMaskConverter = PatchMarkerBag & {
   parse?: (...args: unknown[]) => unknown
 }
@@ -40,7 +44,13 @@ type ParsedEntityLike = {
   boundary?: Point2dLike[]
 }
 
-const PATCH_MARKER = Symbol.for('shabeercad.raster-mask-compatibility')
+const CONVERTER_PATCH_MARKER = Symbol.for('shabeercad.raster-mask-converter')
+const RASTER_BOUNDARY_PATCH_MARKER = Symbol.for(
+  'shabeercad.raster-image-boundary-path'
+)
+const WIPEOUT_WORLD_DRAW_PATCH_MARKER = Symbol.for(
+  'shabeercad.wipeout-world-draw'
+)
 const WIPEOUT_DRAW_ORDER = -0.5
 const WHITE = 0xffffff
 
@@ -59,7 +69,7 @@ export function installRasterMaskCompatibilityPatch() {
 
 export function patchRasterMaskConverter(converter: unknown) {
   const target = converter as RasterMaskConverter
-  if (target[PATCH_MARKER] || typeof target.parse !== 'function') {
+  if (target[CONVERTER_PATCH_MARKER] || typeof target.parse !== 'function') {
     return
   }
 
@@ -72,7 +82,7 @@ export function patchRasterMaskConverter(converter: unknown) {
     normalizeParsedRasterMaskPayloads(result)
     return result
   }
-  target[PATCH_MARKER] = true
+  target[CONVERTER_PATCH_MARKER] = true
 }
 
 function patchRasterImageBoundaryPath() {
@@ -85,7 +95,7 @@ function patchRasterImageBoundaryPath() {
     return
   }
 
-  if (prototype[PATCH_MARKER]) {
+  if (prototype[RASTER_BOUNDARY_PATCH_MARKER]) {
     return
   }
 
@@ -100,7 +110,7 @@ function patchRasterImageBoundaryPath() {
     return originalBoundaryPath.call(this)
   }
 
-  prototype[PATCH_MARKER] = true
+  prototype[RASTER_BOUNDARY_PATCH_MARKER] = true
 }
 
 function patchWipeoutWorldDraw() {
@@ -113,7 +123,7 @@ function patchWipeoutWorldDraw() {
     return
   }
 
-  if (prototype[PATCH_MARKER]) {
+  if (prototype[WIPEOUT_WORLD_DRAW_PATCH_MARKER]) {
     return
   }
 
@@ -127,21 +137,25 @@ function patchWipeoutWorldDraw() {
       return originalSubWorldDraw.call(this, renderer)
     }
 
-    const area = new AcGeArea2d()
-    area.add(new AcGePolyline2d(points))
-
     const traits = renderer.subEntityTraits
     const previousTraits = snapshotTraits(traits)
     applyWipeoutTraits(traits)
 
     try {
+      const maskRenderer = renderer as RasterMaskRenderer
+      if (typeof maskRenderer.rasterMask === 'function') {
+        return maskRenderer.rasterMask(points)
+      }
+
+      const area = new AcGeArea2d()
+      area.add(new AcGePolyline2d(points))
       return renderer.area(area)
     } finally {
       restoreTraits(traits, previousTraits)
     }
   }
 
-  prototype[PATCH_MARKER] = true
+  prototype[WIPEOUT_WORLD_DRAW_PATCH_MARKER] = true
 }
 
 function buildRasterBoundary(image: AcDbRasterImage) {
@@ -203,7 +217,10 @@ function normalizeEntities(entities: ParsedEntityLike[] | undefined) {
   }
 
   entities.forEach(entity => {
-    if (entity.type === 'IMAGE' && !Array.isArray(entity.clippingBoundaryPath)) {
+    if (
+      entity.type === 'IMAGE' &&
+      !Array.isArray(entity.clippingBoundaryPath)
+    ) {
       entity.clippingBoundaryPath = []
     } else if (entity.type === 'WIPEOUT' && !Array.isArray(entity.boundary)) {
       entity.boundary = []

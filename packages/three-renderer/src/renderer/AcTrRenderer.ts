@@ -25,7 +25,8 @@ import {
   AcTrMText,
   AcTrObject,
   AcTrPoint,
-  AcTrPolygon
+  AcTrPolygon,
+  AcTrRasterMask
 } from '../object'
 import { AcTrMaterialManager } from '../style/AcTrMaterialManager'
 import { AcTrStyleManager } from '../style/AcTrStyleManager'
@@ -324,6 +325,14 @@ export class AcTrRenderer implements AcGiRenderer<AcTrEntity> {
    */
   area(area: AcGeArea2d) {
     return new AcTrPolygon(area, this._subEntityTraits, this._styleManager)
+  }
+
+  /**
+   * Renders a solid raster mask such as WIPEOUT without using the hatch
+   * boundary hierarchy/boolean pipeline.
+   */
+  rasterMask(points: AcGePoint3dLike[]) {
+    return new AcTrRasterMask(points, this._subEntityTraits, this._styleManager)
   }
 
   /**
