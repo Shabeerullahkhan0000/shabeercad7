@@ -145,6 +145,8 @@ function patchWipeoutWorldDraw() {
 }
 
 function buildRasterBoundary(image: AcDbRasterImage) {
+  const imageSizeX = positiveOrFallback(image.imageSize.x, 0)
+  const imageSizeY = positiveOrFallback(image.imageSize.y, 0)
   const width = positiveOrFallback(image.width, 0)
   const height = positiveOrFallback(image.height, 0)
   const position = image.position
@@ -153,27 +155,26 @@ function buildRasterBoundary(image: AcDbRasterImage) {
     return []
   }
 
+  const pixelWidth = imageSizeX > 0 ? width / imageSizeX : width
+  const pixelHeight = imageSizeY > 0 ? height / imageSizeY : height
   const clipBoundary =
     image.isClipped && image.clipBoundary.length >= 3
       ? image.clipBoundary.filter(isFinitePoint2d)
       : []
 
-  const localPoints =
+  const imagePoints =
     clipBoundary.length >= 3
-      ? mapClipBoundaryToLocalPoints(clipBoundary, image, width, height)
-      : [
-          new AcGePoint2d(0, 0),
-          new AcGePoint2d(width, 0),
-          new AcGePoint2d(width, height),
-          new AcGePoint2d(0, height)
-        ]
+      ? clipBoundary
+      : createDefaultImageBoundary(imageSizeX, imageSizeY)
 
   const rotation = finiteOrDefault(image.rotation, 0)
   const cos = Math.cos(rotation)
   const sin = Math.sin(rotation)
-  const points = localPoints.map(point => {
-    const x = position.x + point.x * cos - point.y * sin
-    const y = position.y + point.x * sin + point.y * cos
+  const points = imagePoints.map(point => {
+    const localX = point.x * pixelWidth
+    const localY = point.y * pixelHeight
+    const x = position.x + localX * cos - localY * sin
+    const y = position.y + localX * sin + localY * cos
     return new AcGePoint3d(x, y, position.z)
   })
 
@@ -210,31 +211,22 @@ function normalizeEntities(entities: ParsedEntityLike[] | undefined) {
   })
 }
 
-function mapClipBoundaryToLocalPoints(
-  clipBoundary: AcGePoint2d[],
-  image: AcDbRasterImage,
-  width: number,
-  height: number
-) {
-  const minX = Math.min(...clipBoundary.map(point => point.x))
-  const minY = Math.min(...clipBoundary.map(point => point.y))
-  const maxX = Math.max(...clipBoundary.map(point => point.x))
-  const maxY = Math.max(...clipBoundary.map(point => point.y))
-  const spanX = maxX - minX
-  const spanY = maxY - minY
-
-  if (spanX <= 0 || spanY <= 0) {
-    return []
+function createDefaultImageBoundary(imageSizeX: number, imageSizeY: number) {
+  if (imageSizeX > 0 && imageSizeY > 0) {
+    return [
+      new AcGePoint2d(-0.5, -0.5),
+      new AcGePoint2d(imageSizeX - 0.5, -0.5),
+      new AcGePoint2d(imageSizeX - 0.5, imageSizeY - 0.5),
+      new AcGePoint2d(-0.5, imageSizeY - 0.5)
+    ]
   }
 
-  const scaleX =
-    image.imageSize.x > 1 && spanX > 1 ? width / image.imageSize.x : width
-  const scaleY =
-    image.imageSize.y > 1 && spanY > 1 ? height / image.imageSize.y : height
-
-  return clipBoundary.map(
-    point => new AcGePoint2d((point.x - minX) * scaleX, (point.y - minY) * scaleY)
-  )
+  return [
+    new AcGePoint2d(0, 0),
+    new AcGePoint2d(1, 0),
+    new AcGePoint2d(1, 1),
+    new AcGePoint2d(0, 1)
+  ]
 }
 
 function applyWipeoutTraits(traits: AcGiSubEntityTraits) {

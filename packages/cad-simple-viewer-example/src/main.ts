@@ -11,7 +11,13 @@ import {
   setLogLevel
 } from '@mlightcad/data-model'
 
-setLogLevel(import.meta.env.DEV ? 'debug' : 'error')
+const enableCadDebugLogs =
+  import.meta.env.DEV &&
+  (new URLSearchParams(window.location.search).has('cadDebug') ||
+    window.localStorage.getItem('cadDebug') === '1')
+setLogLevel(
+  import.meta.env.DEV ? (enableCadDebugLogs ? 'debug' : 'warn') : 'error'
+)
 
 /**
  * Demo-only command alias overrides used by the example app.
