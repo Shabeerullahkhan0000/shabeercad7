@@ -83,6 +83,10 @@ import { AcApContext } from './AcApContext'
 import { AcApDocument } from './AcApDocument'
 import { AcApFontLoader } from './AcApFontLoader'
 import { AcApProgress } from './AcApProgress'
+import {
+  installRasterMaskCompatibilityPatch,
+  patchRasterMaskConverter
+} from './AcApRasterMaskCompatibility'
 import { AcApOpenDatabaseOptions } from './AcDbOpenDatabaseOptions'
 
 const DEFAULT_BASE_URL = 'https://mlightcad.gitlab.io/cad-data/'
@@ -345,6 +349,8 @@ export class AcApDocManager {
    * @private
    */
   private constructor(options: AcApDocManagerOptions = {}) {
+    installRasterMaskCompatibilityPatch()
+
     this._baseUrl = options.baseUrl ?? DEFAULT_BASE_URL
     this._commandAliasOverrides = this.normalizeCommandAliasConfig(
       options.commandAliases
@@ -1175,6 +1181,7 @@ export class AcApDocManager {
             ? webworkerFileUrls.dxfParser
             : './assets/dxf-parser-worker.js'
       })
+      patchRasterMaskConverter(converter)
       AcDbDatabaseConverterManager.instance.register(
         AcDbFileType.DXF,
         converter
@@ -1193,6 +1200,7 @@ export class AcApDocManager {
             ? webworkerFileUrls.dwgParser
             : './assets/libredwg-parser-worker.js'
       })
+      patchRasterMaskConverter(converter)
       AcDbDatabaseConverterManager.instance.register(
         AcDbFileType.DWG,
         converter
