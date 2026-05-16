@@ -58,9 +58,19 @@ describe('AcApRasterMaskCompatibility', () => {
   test('uses direct raster mask rendering when the renderer supports it', () => {
     const wipeout = createUnitWipeout(50, 50)
     const maskEntity = {} as AcGiEntity
+    const capturedTraits: {
+      isForeground?: boolean
+      rgbColor?: number
+      drawOrder?: number
+    } = {}
     const renderer = {
       subEntityTraits: createTraits(),
-      rasterMask: jest.fn(() => maskEntity),
+      rasterMask: jest.fn(function rasterMask(this: AcGiRenderer) {
+        capturedTraits.isForeground = this.subEntityTraits.color.isForeground
+        capturedTraits.rgbColor = this.subEntityTraits.rgbColor
+        capturedTraits.drawOrder = this.subEntityTraits.drawOrder
+        return maskEntity
+      }),
       area: jest.fn()
     } as unknown as AcGiRenderer & {
       rasterMask: jest.Mock<AcGiEntity, [AcGePoint3d[]]>
@@ -73,6 +83,9 @@ describe('AcApRasterMaskCompatibility', () => {
     expect(renderer.rasterMask).toHaveBeenCalledTimes(1)
     expect(renderer.rasterMask.mock.calls[0][0]).toHaveLength(5)
     expect(renderer.area).not.toHaveBeenCalled()
+    expect(capturedTraits.isForeground).toBe(true)
+    expect(capturedTraits.rgbColor).toBe(0xffffff)
+    expect(capturedTraits.drawOrder).toBe(-0.5)
   })
 })
 

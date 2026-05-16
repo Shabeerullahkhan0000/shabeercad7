@@ -52,15 +52,15 @@ const WIPEOUT_WORLD_DRAW_PATCH_MARKER = Symbol.for(
   'shabeercad.wipeout-world-draw'
 )
 const WIPEOUT_DRAW_ORDER = -0.5
-const WHITE = 0xffffff
 
 let hasReportedInvalidRasterBoundary = false
 
 /**
  * Installs compatibility fixes for raster-image and wipeout entities emitted by
  * @mlightcad/data-model 1.7.x. Real architectural drawings often use WIPEOUT
- * entities as white masks behind sanitary/furniture blocks; the upstream model
- * currently treats them as generic hatch-like areas and misses several guards.
+ * entities as background masks behind sanitary/furniture blocks; the upstream
+ * model currently treats them as generic hatch-like areas and misses several
+ * guards.
  */
 export function installRasterMaskCompatibilityPatch() {
   patchRasterImageBoundaryPath()
@@ -247,8 +247,11 @@ function createDefaultImageBoundary(imageSizeX: number, imageSizeY: number) {
 }
 
 function applyWipeoutTraits(traits: AcGiSubEntityTraits) {
-  traits.color = new AcCmColor().setRGBValue(WHITE)
-  traits.rgbColor = WHITE
+  // WIPEOUT should paint with the active viewport/background color, not a
+  // literal white rectangle. The fill material manager already treats solid
+  // ACI-7 fills below linework as background-follow masks.
+  traits.color = new AcCmColor().setForeground()
+  traits.rgbColor = 0xffffff
   traits.fillType = {
     solidFill: true,
     patternAngle: 0,
